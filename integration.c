@@ -131,5 +131,53 @@ int main(int argc, char** argv) {
                 MPI_Send(NULL, 0, MPI_BYTE, i, TAG_TERMINATE, MPI_COMM_WORLD);
             }
         }
+        else { // WORKER 
+            while (1) {
+                MPI_Send(NULL, 0, MPI_BYTE, 0, TAG_WORK_REQ, MPI_COMM_WORLD); // 1. Request work 
+                
+                Task t;
+                MPI_Status status;
+                MPI_Recv(&t, sizeof(Task), MPI_BYTE, 0, MPI_ANY_TAG, MPI_COMM_WORLD, &status); // 2. Receive 
+
+                if (status.MPI_TAG == TAG_TERMINATE) break; // End signal 
+
+                // 3. Apply adaptive logic 
+                double m = (t.L + t.R) / 2.0;
+                double left_s = simpson(func_id, t.L, m);
+                double right_s = simpson(func_id, m, t.R);
+                double whole_s = simpson(func_id, t.L, t.R);
+
+                if (fabs(left_s + right_s - whole_s) <= 15 * tol) {
+                    // Accepted result 
+                    double res[2] = {left_s + right_s + (left_s + right_s - whole_s) / 15.0, 1.0};
+                    MPI_Send(res, 2, MPI_DOUBLE, 0, TAG_RESULT, MPI_COMM_WORLD); 
+                } else {
+                    // Split 
+                    double new_task[2] = {m, t.R}; 
+                    MPI_Send(new_task, 2, MPI_DOUBLE, 0, TAG_NEW_TASK, MPI_COMM_WORLD); // Send half back 
+                    
+                    // Worker handles the other half immediately to stay busy 
+                    // (Simplified logic: push back to master for this assignment version)
+                    double left_task[2] = {t.L, m};
+                    MPI_Send(left_task, 2, MPI_DOUBLE, 0, TAG_NEW_TASK, MPI_COMM_WORLD);
+                    
+                    // Reset active_worker count for this worker since it's "done" with the original task
+                    double zero_res[2] = {0, 0};
+                    MPI_Send(zero_res, 2, MPI_DOUBLE, 0, TAG_RESULT, MPI_COMM_WORLD);
+                }
+            }
+        }
+    }
 
     end_time = MPI_Wtime();
+
+    if (rank == 0) {
+        printf("\n--- Results (Mode %d) ---\n", mode);
+        printf("Integral: %.10f\n", total_integral);
+        printf("Total Intervals: %d\n", total_intervals); // Deterministic work indicator 
+        printf("Execution Time: %f seconds\n", end_time - start_time);
+    }
+
+    MPI_Finalize();
+    return 0;
+}
