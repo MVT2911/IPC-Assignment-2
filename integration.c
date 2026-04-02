@@ -76,6 +76,60 @@ int main(int argc, char** argv) {
         }
     }
 
+    // --- MODE 1: STATIC DECOMPOSITION --- 
+    else if (mode == 1) {
+        int K = 100; // Chosen value for K coarse intervals 
+        double step = 1.0 / K;
+        double local_sum = 0;
+        int local_count = 0;
 
+        for (int i = rank; i < K; i += size) { // Round-robin distribution 
+            local_sum += adaptive_recursive(func_id, i*step, (i+1)*step, tol/K, &local_count);
+        }
+
+        MPI_Reduce(&local_sum, &total_integral, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD); 
+        MPI_Reduce(&local_count, &total_intervals, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+    }
+
+    // --- MODE 2: DYNAMIC MASTER/WORKER --- 
+    else if (mode == 2) {
+        if (rank == 0) { // MASTER 
+            Task stack[20000]; 
+            int top = 0;
+            int active_workers = 0;
+
+            // Initial task [0, 1] 
+            stack[top++] = (Task){0.0, 1.0};
+
+            while (top > 0 || active_workers > 0) { // Termination detection logic 
+                MPI_Status status;
+                double msg_buffer[2]; 
+                MPI_Recv(msg_buffer, 2, MPI_DOUBLE, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
+                int worker = status.MPI_SOURCE;
+
+                if (status.MPI_TAG == TAG_WORK_REQ) {
+                    if (top > 0) {
+                        Task t = stack[--top];
+                        MPI_Send(&t, sizeof(Task), MPI_BYTE, worker, TAG_WORK_TASK, MPI_COMM_WORLD);
+                        active_workers++;
+                    } else {
+                        // Queue empty, but other workers might still be generating tasks
+                        MPI_Send(NULL, 0, MPI_BYTE, worker, TAG_TERMINATE, MPI_COMM_WORLD);
+                    }
+                } 
+                else if (status.MPI_TAG == TAG_RESULT) {
+                    total_integral += msg_buffer[0];
+                    total_intervals += (int)msg_buffer[1];
+                    active_workers--;
+                }
+                else if (status.MPI_TAG == TAG_NEW_TASK) {
+                    stack[top++] = (Task){msg_buffer[0], msg_buffer[1]};
+                }
+            }
+            // Signal all workers to shut down permanently 
+            for (int i = 1; i < size; i++) {
+                MPI_Send(NULL, 0, MPI_BYTE, i, TAG_TERMINATE, MPI_COMM_WORLD);
+            }
+        }
 
     end_time = MPI_Wtime();
