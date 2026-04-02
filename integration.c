@@ -54,7 +54,7 @@ int main(int argc, char** argv) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-    if (argc < 5) {
+    if (argc < 4) {
         if (rank == 0) printf("Usage: mpirun -np P integration func_id mode tol\n");
         MPI_Finalize();
         return 0;
