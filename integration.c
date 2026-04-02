@@ -46,3 +46,36 @@ double adaptive_recursive(int id, double a, double b, double tol, int *count) {
     return adaptive_recursive(id, a, m, tol/2.0, count) + 
            adaptive_recursive(id, m, b, tol/2.0, count);
 }
+
+
+int main(int argc, char** argv) {
+    MPI_Init(&argc, &argv); 
+    int rank, size;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+    if (argc < 5) {
+        if (rank == 0) printf("Usage: mpirun -np P integration func_id mode tol\n");
+        MPI_Finalize();
+        return 0;
+    }
+
+    int func_id = atoi(argv[1]);
+    int mode = atoi(argv[2]);
+    double tol = atof(argv[3]);
+    double total_integral = 0;
+    int total_intervals = 0;
+    double start_time, end_time;
+
+    start_time = MPI_Wtime(); 
+
+    // --- MODE 0: SERIAL BASELINE --- 
+    if (mode == 0) {
+        if (rank == 0) {
+            total_integral = adaptive_recursive(func_id, 0, 1, tol, &total_intervals);
+        }
+    }
+
+
+
+    end_time = MPI_Wtime();
