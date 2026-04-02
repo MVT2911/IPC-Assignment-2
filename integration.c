@@ -176,7 +176,7 @@ int main(int argc, char** argv) {
         printf("Integral: %.10f\n", total_integral);
         printf("Total Intervals: %d\n", total_intervals); // Deterministic work indicator 
         printf("Function ID: %d\n", func_id);
-        printf("Error Tolerance: %d\n", tol);
+        printf("Error Tolerance: %.10f\n", tol);
         printf("Execution Time: %f seconds\n", end_time - start_time);
     }
 
